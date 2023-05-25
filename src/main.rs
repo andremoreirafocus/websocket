@@ -7,7 +7,10 @@ async fn main() {
 
   loop {
     let (stream, _) = listener.accept().await.unwrap();
-    handle_connection(stream).await;
+    tokio::spawn(async move {
+      handle_connection(stream).await;
+    });
+    // handle_connection(stream).await;
   }    
 }
 
