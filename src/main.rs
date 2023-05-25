@@ -1,21 +1,24 @@
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use tokio::net::{TcpListener, TcpStream};
 use std::str;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[tokio::main]
 async fn main() {
+  let balance = Arc::new(Mutex::new(0.00f32));
   let listener = TcpListener::bind("127.0.0.1:8181").await.unwrap();
 
   loop {
     let (stream, _) = listener.accept().await.unwrap();
+    let balance = balance.clone();
     tokio::spawn(async move {
-      handle_connection(stream).await;
+      handle_connection(stream, balance).await;
     });
     // handle_connection(stream).await;
   }    
 }
 
-async fn handle_connection (mut stream: TcpStream) {
+async fn handle_connection (mut stream: TcpStream, balance: Arc<Mutex<f32>>) {
   let mut buffer = [0;16];
   stream.read(&mut buffer).await.unwrap();
   let method = match str::from_utf8(&buffer[0..4]) {
@@ -24,11 +27,9 @@ async fn handle_connection (mut stream: TcpStream) {
       panic!("Invalid UTF-8 sequence {}", e)
     }
   };
-
-  // let contents = "{\"balance\": 0.00}";
   let contents = match method {
     "GET " => {
-      format!("{{\"balance\": {}}}", 0.0)
+      format!("{{\"balance\": {}}}", balance.lock().unwrap())
     },
     "POST" => {
       let input: String = buffer [6..16]
@@ -37,6 +38,8 @@ async fn handle_connection (mut stream: TcpStream) {
         .map(|x| *x as char)
         .collect();
       let balance_update = input.parse::<f32>().unwrap();
+      let mut locked_balance: MutexGuard<f32> = balance.lock().unwrap();
+      *locked_balance += balance_update;
       println!("balance: {}", balance_update);
       format!("{{\"balance\":{}}}", balance_update)
     },
